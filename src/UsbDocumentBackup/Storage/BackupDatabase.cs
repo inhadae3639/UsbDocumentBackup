@@ -51,7 +51,10 @@ public sealed class BackupDatabase
                 fingerprint   TEXT NOT NULL,
                 display_name  TEXT NOT NULL,
                 last_seen_utc TEXT NOT NULL,
-                bus_kind      TEXT NOT NULL
+                bus_kind      TEXT NOT NULL,
+                -- Drive folder for this device, remembered by id rather than looked up by name so
+                -- renaming the folder in Drive does not split the backups across two folders.
+                drive_folder_id TEXT
             );
 
             CREATE UNIQUE INDEX IF NOT EXISTS ix_devices_volume

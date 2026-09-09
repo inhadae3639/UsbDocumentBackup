@@ -59,10 +59,36 @@ public sealed class GoogleConnection
         _store = new DpapiDataStore(paths.CredentialsDirectory);
     }
 
+    /// <summary>Resource name of the OAuth client compiled into the binary, when there is one.</summary>
+    private const string EmbeddedSecretsResource = "UsbDocumentBackup.client_secret.json";
+
     /// <summary>The OAuth desktop client the user imported from Google Cloud.</summary>
     public string ClientSecretsFile => Path.Combine(_paths.CredentialsDirectory, "client_secret.json");
 
-    public bool IsConfigured => File.Exists(ClientSecretsFile);
+    /// <summary>
+    /// Whether the app can start an authorisation at all. True when a client configuration was
+    /// imported, or when one was compiled in -- which is what lets a single executable work on a
+    /// machine that has never seen the JSON file.
+    /// </summary>
+    public bool IsConfigured => File.Exists(ClientSecretsFile) || HasEmbeddedClientSecrets;
+
+    internal static bool HasEmbeddedClientSecrets =>
+        typeof(GoogleConnection).Assembly.GetManifestResourceInfo(EmbeddedSecretsResource) is not null;
+
+    /// <summary>
+    /// Opens the OAuth client configuration, preferring one the user imported so a build-time
+    /// default can always be overridden without rebuilding.
+    /// </summary>
+    private Stream OpenClientSecrets()
+    {
+        if (File.Exists(ClientSecretsFile))
+        {
+            return File.OpenRead(ClientSecretsFile);
+        }
+
+        return typeof(GoogleConnection).Assembly.GetManifestResourceStream(EmbeddedSecretsResource)
+            ?? throw new InvalidOperationException("No OAuth client configuration is available.");
+    }
 
     public ConnectionState State { get; private set; } = ConnectionState.NotConnected;
 
@@ -111,6 +137,58 @@ public sealed class GoogleConnection
     }
 
     /// <summary>
+    /// Picks up an OAuth client configuration the user dropped next to the executable, so setting
+    /// this up on another PC is "copy two files and click Connect" instead of hunting through a
+    /// file picker.
+    ///
+    /// The file is deliberately read from disk rather than compiled in: this repository is public,
+    /// and a client secret committed to it would be readable by anyone.
+    /// </summary>
+    /// <returns>The file that was imported, or null when there was nothing to import.</returns>
+    public string? TryAutoImportClientSecrets()
+    {
+        // Only the imported file short-circuits this. A build-time default is still overridable by
+        // dropping a different JSON next to the executable.
+        if (File.Exists(ClientSecretsFile))
+        {
+            return null;
+        }
+
+        var exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
+        if (string.IsNullOrEmpty(exeDirectory))
+        {
+            return null;
+        }
+
+        IEnumerable<string> candidates;
+        try
+        {
+            candidates = Directory.EnumerateFiles(exeDirectory, "client_secret*.json").OrderBy(f => f, StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                ImportClientSecrets(candidate);
+                _log.Info($"Imported the OAuth client configuration from {Path.GetFileName(candidate)}.");
+                return candidate;
+            }
+            catch (ClientSecretsRejectedException ex)
+            {
+                // A service-account key sitting in the folder should be reported, not retried.
+                _log.Warn($"Ignored {Path.GetFileName(candidate)}: {ex.Message.Split(Environment.NewLine)[0]}");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Returns an explanation when the file is a recognisable but unusable credential, or null when
     /// it looks like the right thing.
     /// </summary>
@@ -155,7 +233,7 @@ public sealed class GoogleConnection
         UserCredential credential;
         try
         {
-            await using var stream = File.OpenRead(ClientSecretsFile);
+            await using var stream = OpenClientSecrets();
             credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
                 GoogleClientSecrets.FromStream(stream).Secrets,
                 Scopes,
@@ -237,7 +315,7 @@ public sealed class GoogleConnection
                 return false;
             }
 
-            await using var stream = File.OpenRead(ClientSecretsFile);
+            await using var stream = OpenClientSecrets();
             var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
             {
                 ClientSecrets = GoogleClientSecrets.FromStream(stream).Secrets,

@@ -38,6 +38,16 @@ public sealed class AppSettings
     /// <summary>Identifies the connected Google account so a re-connect cannot silently switch accounts.</summary>
     public string? GoogleAccountKey { get; set; }
 
+    /// <summary>
+    /// The account this installation is meant to upload to, set ahead of time. When present, a
+    /// connection to any other account is refused instead of quietly uploading somewhere else.
+    /// </summary>
+    public string? ExpectedGoogleAccount { get; set; }
+
+    /// <summary>Top-level Drive folder name, used only when the folder is first created.</summary>
+    public string DriveFolderName { get; set; } = "USB Document Backups";
+
+    /// <summary>Resolved once the folder exists; the id is what uploads actually use.</summary>
     public string? DriveFolderId { get; set; }
 
     [JsonIgnore]

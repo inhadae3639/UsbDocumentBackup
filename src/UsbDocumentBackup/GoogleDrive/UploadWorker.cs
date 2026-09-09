@@ -23,7 +23,6 @@ public sealed class UploadWorker
     /// <summary>Drive requires resumable chunks to be a multiple of 256 KiB.</summary>
     private const int ChunkSize = 8 * 1024 * 1024;
 
-    private const string RootFolderName = "USB Document Backups";
     private const int MaxTransientAttempts = 12;
 
     private readonly AppPaths _paths;
@@ -288,18 +287,45 @@ public sealed class UploadWorker
 
         try
         {
+            // Both folders are remembered by id, never re-found by name. A Drive id survives the
+            // user renaming or moving the folder, so tidying up in Drive does not split the
+            // backups across an old folder and a freshly created one. The only case that forces a
+            // new folder is the remembered one being deleted or trashed.
             var rootId = _settings.DriveFolderId;
+            if (!string.IsNullOrEmpty(rootId)
+                && !await client.FolderExistsAsync(rootId, cancellationToken).ConfigureAwait(false))
+            {
+                _log.Warn("The Drive backup folder is gone; creating a new one.");
+                rootId = null;
+            }
+
             if (string.IsNullOrEmpty(rootId))
             {
-                rootId = await client.EnsureFolderAsync(RootFolderName, null, cancellationToken).ConfigureAwait(false);
+                var folderName = string.IsNullOrWhiteSpace(_settings.DriveFolderName)
+                    ? "USB Document Backups"
+                    : _settings.DriveFolderName.Trim();
+                rootId = await client.EnsureFolderAsync(folderName, null, cancellationToken).ConfigureAwait(false);
                 _settings.DriveFolderId = rootId;
                 _settingsStore.Save(_settings);
             }
 
             // One subfolder per device so the web view is navigable without this app.
-            var device = _repository.ListDevices().FirstOrDefault(d => d.Id == backup.DeviceId);
-            var deviceName = Sanitize(device?.DisplayName ?? backup.DeviceId);
-            return await client.EnsureFolderAsync(deviceName, rootId, cancellationToken).ConfigureAwait(false);
+            var deviceFolderId = _repository.GetDeviceDriveFolder(backup.DeviceId);
+            if (!string.IsNullOrEmpty(deviceFolderId)
+                && !await client.FolderExistsAsync(deviceFolderId, cancellationToken).ConfigureAwait(false))
+            {
+                deviceFolderId = null;
+            }
+
+            if (string.IsNullOrEmpty(deviceFolderId))
+            {
+                var device = _repository.ListDevices().FirstOrDefault(d => d.Id == backup.DeviceId);
+                var deviceName = Sanitize(device?.DisplayName ?? backup.DeviceId);
+                deviceFolderId = await client.EnsureFolderAsync(deviceName, rootId, cancellationToken).ConfigureAwait(false);
+                _repository.SaveDeviceDriveFolder(backup.DeviceId, deviceFolderId);
+            }
+
+            return deviceFolderId;
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {

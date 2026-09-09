@@ -131,11 +131,14 @@ public sealed class SettingsForm : Form
         {
             ConnectionState.Connected => $"연결됨: {account}. 연 발표자료만 이 계정의 'USB Document Backups' 폴더로 올라갑니다.",
             ConnectionState.ReconnectRequired => $"재연결 필요 ({account}). 업로드만 멈추고 PC 백업과 복원은 계속됩니다.",
-            ConnectionState.NotConfigured => "클라이언트 설정 파일이 없습니다. Google Cloud에서 받은 JSON을 선택하세요 (docs/google-setup.md).",
+            ConnectionState.NotConfigured => "클라이언트 설정이 없습니다. Google Cloud에서 받은 데스크톱 클라이언트 JSON을 선택하세요 (docs/google-setup.md).",
             _ => "연결되지 않음. 업로드는 대기 상태로 남고 PC 백업과 복원은 그대로 동작합니다.",
         };
 
         _connectButton.Enabled = _host.Google.IsConfigured;
+        _importSecretsButton.Text = _host.Google.IsConfigured
+            ? "클라이언트 설정 교체..."
+            : "클라이언트 설정 파일 선택...";
         _disconnectButton.Enabled = _host.Google.State is ConnectionState.Connected or ConnectionState.ReconnectRequired;
     }
 
@@ -179,6 +182,26 @@ public sealed class SettingsForm : Form
         try
         {
             var account = await _host.Google.ConnectAsync(CancellationToken.None).ConfigureAwait(true);
+
+            // An installation can be pinned to one account ahead of time, so a stray login on a
+            // shared PC cannot send someone's presentations to the wrong Drive.
+            var expected = _host.Settings.ExpectedGoogleAccount;
+            if (expected is { Length: > 0 } && !expected.Equals(account, StringComparison.OrdinalIgnoreCase))
+            {
+                await _host.Google.DisconnectAsync().ConfigureAwait(true);
+                MessageBox.Show(
+                    this,
+                    $"이 설치본은 {expected} 계정 전용으로 지정돼 있는데 {account} 로 로그인했습니다."
+                        + Environment.NewLine + Environment.NewLine
+                        + "연결을 취소했습니다. 지정 계정으로 다시 로그인하거나, settings.json의 "
+                        + "ExpectedGoogleAccount 값을 바꾸세요.",
+                    "지정된 계정이 아닙니다",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                _noticeLabel.Text = $"{expected} 계정으로만 연결할 수 있습니다.";
+                RefreshGoogle();
+                return;
+            }
 
             var previous = _host.Settings.GoogleAccountKey;
             if (previous is { Length: > 0 } && !previous.Equals(account, StringComparison.OrdinalIgnoreCase))

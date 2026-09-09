@@ -32,4 +32,15 @@
     <InternalsVisibleTo Include="UsbDocumentBackup.Tests" />
   </ItemGroup>
 
+  <!--
+    The OAuth desktop client is baked into the binary so a single exe works on any PC with nothing
+    beside it. Google treats an installed-app client secret as non-secret, but this repository is
+    public and GitHub secret scanning would get the credential revoked, so the file lives outside
+    version control. The Condition keeps the project building for anyone who clones without it.
+  -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\secrets\client_secret.json')">
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\secrets\client_secret.json"
+                      LogicalName="UsbDocumentBackup.client_secret.json" />
+  </ItemGroup>
+
 </Project>

@@ -45,6 +45,10 @@ internal static class Program
 
         try
         {
+            // A client_secret*.json dropped next to the executable configures the app without any
+            // clicking. It still never signs in on its own; the user presses Connect.
+            host.Google.TryAutoImportClientSecrets();
+
             // Silently pick up a previously authorised account so uploads resume on their own after
             // a reboot. This never opens a browser: if the stored token is no longer good the state
             // becomes "reconnect required" and the user decides when to deal with it.

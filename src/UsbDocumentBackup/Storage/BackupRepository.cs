@@ -94,6 +94,17 @@ public sealed class BackupRepository
         return results;
     }
 
+    /// <summary>
+    /// The Drive folder this device's backups go to, remembered by id. Null until the first upload.
+    /// </summary>
+    public string? GetDeviceDriveFolder(string deviceId) =>
+        Scalar("SELECT drive_folder_id FROM devices WHERE id = $id;", ("$id", deviceId));
+
+    public void SaveDeviceDriveFolder(string deviceId, string driveFolderId) => Execute(
+        "UPDATE devices SET drive_folder_id = $folder WHERE id = $id;",
+        ("$folder", driveFolderId),
+        ("$id", deviceId));
+
     // ---------- backups ----------
 
     private const string BackupColumns =

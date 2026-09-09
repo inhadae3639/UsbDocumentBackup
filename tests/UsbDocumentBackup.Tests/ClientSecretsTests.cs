@@ -75,8 +75,8 @@ public sealed class ClientSecretsTests
         var error = Assert.Throws<ClientSecretsRejectedException>(() => connection.ImportClientSecrets(file));
         Assert.Contains("서비스 계정", error.Message, StringComparison.Ordinal);
 
-        // Nothing unusable is left behind pretending the app is configured.
-        Assert.False(connection.IsConfigured);
+        // The rejected key is not stored. (IsConfigured may still be true from a credential
+        // compiled into the build, which is a separate mechanism with its own tests.)
         Assert.False(File.Exists(connection.ClientSecretsFile));
     }
 

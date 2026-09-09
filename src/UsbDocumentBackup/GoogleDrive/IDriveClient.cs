@@ -42,6 +42,12 @@ public interface IDriveClient
     Task<string> EnsureFolderAsync(string name, string? parentId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether a folder we remembered by id is still usable. False when it was deleted or moved to
+    /// the trash, which is what tells the caller to make a fresh one instead of failing forever.
+    /// </summary>
+    Task<bool> FolderExistsAsync(string folderId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reserves a file id up front. Reusing it on a retry is what stops a connection dropped after
     /// a successful upload from producing a second copy of the same version.
     /// </summary>

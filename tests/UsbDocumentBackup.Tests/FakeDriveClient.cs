@@ -68,15 +68,36 @@ public sealed class FakeDriveClient : IDriveClient
         return Task.FromResult(AccountKey);
     }
 
+    private readonly Dictionary<string, string> _folderIdsByPath = new(StringComparer.Ordinal);
+    private int _folderCounter;
+
     public Task<string> EnsureFolderAsync(string name, string? parentId, CancellationToken cancellationToken)
     {
-        var id = "folder:" + (parentId is null ? string.Empty : parentId + "/") + name;
-        if (!CreatedFolders.Contains(id))
+        var path = (parentId ?? string.Empty) + "/" + name;
+
+        // A folder that is still there is found by name. One that was trashed is not, and Drive
+        // hands back a brand new id for the replacement -- which is what makes a stale stored id
+        // genuinely stale.
+        if (_folderIdsByPath.TryGetValue(path, out var existing) && !TrashedFolders.Contains(existing))
         {
-            CreatedFolders.Add(id);
+            return Task.FromResult(existing);
         }
 
+        var id = "folder-" + (++_folderCounter);
+        _folderIdsByPath[path] = id;
+        CreatedFolders.Add(id);
         return Task.FromResult(id);
+    }
+
+    /// <summary>Folder ids the user deleted or moved to the trash in Drive.</summary>
+    public HashSet<string> TrashedFolders { get; } = new(StringComparer.Ordinal);
+
+    public int FolderExistenceChecks { get; private set; }
+
+    public Task<bool> FolderExistsAsync(string folderId, CancellationToken cancellationToken)
+    {
+        FolderExistenceChecks++;
+        return Task.FromResult(CreatedFolders.Contains(folderId) && !TrashedFolders.Contains(folderId));
     }
 
     public Task<string> GenerateFileIdAsync(CancellationToken cancellationToken)

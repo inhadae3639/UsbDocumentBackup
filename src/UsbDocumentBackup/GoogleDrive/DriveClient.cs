@@ -104,6 +104,25 @@ public sealed class DriveClient : IDriveClient
         return body.RootElement.GetProperty("id").GetString()!;
     }
 
+    public async Task<bool> FolderExistsAsync(string folderId, CancellationToken cancellationToken)
+    {
+        using var request = await RequestAsync(HttpMethod.Get, $"{ApiRoot}/files/{folderId}?fields=id,trashed", cancellationToken)
+            .ConfigureAwait(false);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+        // A folder in the trash still resolves by id, but uploading into it would hide the files.
+        return !(document.RootElement.TryGetProperty("trashed", out var trashed) && trashed.GetBoolean());
+    }
+
     public async Task<string> GenerateFileIdAsync(CancellationToken cancellationToken)
     {
         using var request = await RequestAsync(HttpMethod.Get, $"{ApiRoot}/files/generateIds?count=1&space=drive", cancellationToken)
