@@ -142,6 +142,9 @@ public sealed class GoogleConnection
     /// Interactive authorisation. Called only from the Connect button: it opens the system browser
     /// on a loopback redirect, which is the flow Google documents for desktop apps.
     /// </summary>
+    /// <exception cref="ClientSecretsRejectedException">
+    /// Google refused the authorisation for a reason the user can act on.
+    /// </exception>
     public async Task<string> ConnectAsync(CancellationToken cancellationToken)
     {
         if (!IsConfigured)
@@ -149,13 +152,21 @@ public sealed class GoogleConnection
             throw new InvalidOperationException("Import the OAuth client configuration file first.");
         }
 
-        await using var stream = File.OpenRead(ClientSecretsFile);
-        var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-            GoogleClientSecrets.FromStream(stream).Secrets,
-            Scopes,
-            UserKey,
-            cancellationToken,
-            _store).ConfigureAwait(false);
+        UserCredential credential;
+        try
+        {
+            await using var stream = File.OpenRead(ClientSecretsFile);
+            credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+                GoogleClientSecrets.FromStream(stream).Secrets,
+                Scopes,
+                UserKey,
+                cancellationToken,
+                _store).ConfigureAwait(false);
+        }
+        catch (TokenResponseException ex)
+        {
+            throw new ClientSecretsRejectedException(ExplainAuthorizationFailure(ex.Error?.Error, ex.Message));
+        }
 
         lock (_gate)
         {
@@ -167,6 +178,42 @@ public sealed class GoogleConnection
         return await new DriveClient(SharedHttpClient, GetAccessTokenAsync)
             .GetAccountKeyAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Turns Google's OAuth error code into something the user can act on. These are almost always
+    /// Cloud console configuration, not a bug here, and the raw code says nothing about the fix.
+    /// </summary>
+    internal static string ExplainAuthorizationFailure(string? errorCode, string fallback)
+    {
+        var nl = Environment.NewLine;
+        return errorCode switch
+        {
+            "access_denied" =>
+                "Google이 이 계정의 접근을 거부했습니다 (access_denied)." + nl + nl
+                + "가장 흔한 원인은 OAuth 동의 화면이 '테스트 중'인데 이 계정이 테스트 사용자로 "
+                + "등록되지 않은 것입니다." + nl + nl
+                + "Google Cloud Console → Google 인증 플랫폼 → 대상 → 맨 아래 '테스트 사용자'에서 "
+                + "로그인하려는 계정을 추가한 뒤 다시 연결하세요." + nl + nl
+                + "참고: 테스트 상태에서는 갱신 토큰이 7일 뒤 만료됩니다. 계속 쓰시려면 같은 페이지에서 "
+                + "'앱 게시'로 프로덕션 전환을 권장합니다." + nl + nl
+                + "동의 화면에서 직접 '취소'를 누른 경우에도 이 오류가 납니다.",
+
+            "admin_policy_enforced" =>
+                "조직 관리자가 이 앱의 접근을 막고 있습니다 (admin_policy_enforced)." + nl + nl
+                + "학교나 회사 계정이면 관리자가 서드파티 앱을 제한해 둔 것입니다. "
+                + "개인 Google 계정으로 연결하거나 관리자에게 허용을 요청하세요.",
+
+            "invalid_client" =>
+                "클라이언트 정보가 Google에 등록된 것과 맞지 않습니다 (invalid_client)." + nl + nl
+                + "클라이언트를 삭제하고 다시 만들었다면 새 JSON을 다시 가져오세요.",
+
+            "invalid_grant" =>
+                "인증이 더 이상 유효하지 않습니다 (invalid_grant)." + nl + nl
+                + "권한을 철회했거나, 테스트 상태의 7일 만료에 걸렸을 수 있습니다. 다시 연결하세요.",
+
+            _ => "Google 인증에 실패했습니다." + nl + nl + fallback,
+        };
     }
 
     /// <summary>

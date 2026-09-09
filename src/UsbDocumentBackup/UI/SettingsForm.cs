@@ -210,6 +210,13 @@ public sealed class SettingsForm : Form
             _noticeLabel.Text = $"{account} 계정에 연결했습니다. 대기 중인 업로드를 시작합니다.";
             _host.Coordinator.RequestScan(Backup.ScanReason.ChangeEvent);
         }
+        catch (ClientSecretsRejectedException ex)
+        {
+            // A console misconfiguration the user has to go and fix, so it gets a dialog with the
+            // actual steps rather than a raw OAuth error code in small text.
+            MessageBox.Show(this, ex.Message, "Google 연결 실패", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _noticeLabel.Text = "Google 연결에 실패했습니다. 방금 뜬 창과 docs/google-setup.md를 참고하세요.";
+        }
         catch (Exception ex)
         {
             _noticeLabel.Text = "연결에 실패했습니다: " + ex.Message;
