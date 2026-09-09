@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsbDocumentBackup 개인정보처리방침</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 5rem;
+    font: 16px/1.7 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2.25rem; }
+  .updated { color: #666; font-size: .9rem; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #ccc; padding: .5rem .6rem; text-align: left; vertical-align: top; }
+  th { background: rgba(127,127,127,.12); }
+  code { background: rgba(127,127,127,.15); padding: .1em .35em; border-radius: 3px; }
+  .en { margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid #ccc; }
+</style>
+</head>
+<body>
+
+<h1>UsbDocumentBackup 개인정보처리방침</h1>
+<p class="updated">최종 수정일: 2026-09-09</p>
+
+<p>
+  UsbDocumentBackup(이하 "이 앱")은 Windows에서 동작하는 개인용 백업 프로그램입니다.
+  사용자가 PowerPoint로 연 발표 자료를 사용자 본인의 PC에 보관하고, 사용자가 직접 연결한
+  사용자 본인의 Google Drive 계정에 업로드합니다.
+</p>
+<p>
+  <strong>이 앱에는 서버가 없습니다.</strong> 개발자는 사용자의 파일이나 계정 정보를 수집하거나
+  전송받지 않으며, 어떠한 데이터도 볼 수 없습니다.
+</p>
+
+<h2>1. 다루는 정보</h2>
+<table>
+  <tr><th>구분</th><th>내용</th><th>보관 위치</th></tr>
+  <tr>
+    <td>발표 문서</td>
+    <td>사용자가 이 PC에서 연 <code>.ppt</code> / <code>.pptx</code> 파일의 사본</td>
+    <td>사용자 PC, 그리고 사용자가 연결한 Google Drive</td>
+  </tr>
+  <tr>
+    <td>파일 메타데이터</td>
+    <td>파일 이름, 원본 경로, 크기, 수정 시각, SHA-256 해시, 저장장치 표시명</td>
+    <td>사용자 PC의 로컬 데이터베이스</td>
+  </tr>
+  <tr>
+    <td>Google 인증 정보</td>
+    <td>OAuth 갱신 토큰</td>
+    <td>사용자 PC. Windows DPAPI로 <em>현재 사용자 계정 전용</em> 암호화</td>
+  </tr>
+  <tr>
+    <td>Google 계정 이메일</td>
+    <td>연결된 계정을 표시하고, 재연결 시 다른 계정으로 잘못 업로드되는 것을 막기 위한 용도</td>
+    <td>사용자 PC의 설정 파일</td>
+  </tr>
+</table>
+
+<h2>2. 요청하는 Google 권한</h2>
+<p>
+  이 앱은 <code>https://www.googleapis.com/auth/drive.file</code> 범위만 요청합니다.
+  이 범위는 <strong>이 앱이 직접 만든 파일에만</strong> 접근할 수 있습니다.
+  사용자의 Drive에 이미 있던 다른 파일은 이 앱이 읽거나 수정하거나 삭제할 수 없습니다.
+</p>
+<p>Drive 전체 접근 권한은 요청하지 않습니다.</p>
+
+<h2>3. 정보를 보내는 곳</h2>
+<p>
+  업로드 대상은 <strong>사용자가 로그인하여 직접 연결한 사용자 본인의 Google Drive</strong>뿐입니다.
+  그 외 어떤 서버로도 데이터를 전송하지 않습니다. 분석 도구, 광고, 오류 수집 서비스,
+  제3자 제공은 일절 없습니다.
+</p>
+
+<h2>4. 보관 기간</h2>
+<ul>
+  <li>연 적이 없는 자료의 로컬 사본: 7일 후 자동 삭제</li>
+  <li>연 발표 자료의 로컬 사본: Google Drive 업로드가 확인된 뒤 7일이 지나면 삭제</li>
+  <li>Google Drive에 올라간 파일: 이 앱은 원격 파일을 자동으로 삭제하지 않습니다. 사용자가 직접 관리합니다.</li>
+</ul>
+
+<h2>5. 사용자의 통제 수단</h2>
+<ul>
+  <li>연결 해제: 앱 설정에서 언제든 Google 연결을 끊을 수 있으며, 저장된 토큰은 삭제됩니다.</li>
+  <li>권한 철회: <a href="https://myaccount.google.com/permissions">Google 계정 권한 관리</a>에서 이 앱의 접근을 철회할 수 있습니다.</li>
+  <li>로컬 데이터 삭제: <code>%LOCALAPPDATA%\UsbDocumentBackup</code> 폴더를 삭제하면 보관본·데이터베이스·토큰이 모두 사라집니다.</li>
+  <li>Drive 파일 삭제: Google Drive에서 직접 삭제하면 됩니다.</li>
+</ul>
+
+<h2>6. 문의</h2>
+<p>inhadae3639@gmail.com</p>
+
+<div class="en">
+  <h2>English summary</h2>
+  <p>
+    UsbDocumentBackup is a personal Windows backup utility. It copies PowerPoint presentations the
+    user opened on their own PC and uploads them to the user's own Google Drive account, which the
+    user connects themselves.
+  </p>
+  <p>
+    <strong>There is no server and no developer-side collection.</strong> The developer never
+    receives, stores, or can access any user file or credential.
+  </p>
+  <p>
+    The application requests only the <code>drive.file</code> scope, which grants access solely to
+    files this application itself creates. It cannot read, modify, or delete any pre-existing file
+    in the user's Drive. Full Drive access is never requested.
+  </p>
+  <p>
+    OAuth refresh tokens are stored locally and encrypted with Windows DPAPI, scoped to the current
+    Windows user account. No analytics, advertising, crash reporting, or third-party sharing of any
+    kind is performed. Data is transmitted only to the user's own Google Drive.
+  </p>
+  <p>
+    Users may disconnect the account in the application at any time, revoke access at
+    <a href="https://myaccount.google.com/permissions">Google Account permissions</a>, and delete all
+    local data by removing the <code>%LOCALAPPDATA%\UsbDocumentBackup</code> folder.
+  </p>
+  <p>Contact: inhadae3639@gmail.com</p>
+</div>
+
+</body>
+</html>

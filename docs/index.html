@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsbDocumentBackup</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 5rem;
+    font: 16px/1.7 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  }
+  h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+  .tagline { color: #666; margin-top: 0; }
+  h2 { font-size: 1.15rem; margin-top: 2.25rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #ccc; padding: .5rem .6rem; text-align: left; vertical-align: top; }
+  th { background: rgba(127,127,127,.12); }
+  code { background: rgba(127,127,127,.15); padding: .1em .35em; border-radius: 3px; }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid #ccc; color: #666; font-size: .92rem; }
+</style>
+</head>
+<body>
+
+<h1>UsbDocumentBackup</h1>
+<p class="tagline">발표 자료를 놓치지 않는 Windows 백업 프로그램</p>
+
+<p>
+  Windows 로그인 후 트레이에 상주하면서, <strong>이 PC에서 연 PowerPoint 발표 자료</strong>를
+  저장 위치와 관계없이 찾아 PC에 보관하고 Google Drive에 업로드합니다.
+  USB에 있지만 한 번도 열지 않은 자료는 임시로만 보관합니다.
+</p>
+
+<h2>보관 방식</h2>
+<table>
+  <tr><th>등급</th><th>대상</th><th>Drive</th><th>로컬 보관</th></tr>
+  <tr>
+    <td>영구</td>
+    <td>이 PC에서 연 <code>.ppt</code> / <code>.pptx</code></td>
+    <td>업로드</td>
+    <td>업로드가 확인된 뒤 7일</td>
+  </tr>
+  <tr>
+    <td>임시</td>
+    <td>USB에 있으나 연 적 없는 <code>.ppt</code> / <code>.pptx</code></td>
+    <td>올리지 않음</td>
+    <td>7일</td>
+  </tr>
+</table>
+
+<h2>동작 원칙</h2>
+<ul>
+  <li>원본은 읽기 전용으로만 접근합니다. 이름 변경·이동·삭제·수정을 하지 않습니다.</li>
+  <li>모든 사본은 SHA-256으로 검증한 뒤에만 완료로 기록합니다.</li>
+  <li>발표를 방해하지 않도록 콘솔·진행창·알림 팝업을 띄우지 않고 포커스를 가져가지 않습니다.</li>
+  <li>Google 권한은 <code>drive.file</code>만 요청합니다. 이 앱이 만든 파일 외에는 접근하지 못합니다.</li>
+  <li>토큰 만료 시 브라우저를 자동으로 열지 않습니다. 사용자가 연결 버튼을 누를 때만 인증합니다.</li>
+</ul>
+
+<h2>개인정보</h2>
+<p>
+  서버가 없으며 개발자는 어떤 데이터도 수집하지 않습니다.
+  자세한 내용은 <a href="privacy.html">개인정보처리방침</a>을 참고하세요.
+</p>
+
+<footer>
+  문의: inhadae3639@gmail.com
+</footer>
+
+</body>
+</html>
