@@ -90,6 +90,19 @@ public sealed class UploadWorker
                 _repository.MarkUploadRetry(backup.Id, "Cancelled.", _time.GetUtcNow());
                 break;
             }
+            catch (Google.Apis.Auth.OAuth2.Responses.TokenResponseException ex)
+            {
+                // Refreshing the access token failed. An OAuth project still in testing expires its
+                // refresh token every seven days, so this is a routine event, not a transient one:
+                // no amount of backoff will fix it and the whole queue is blocked until someone
+                // reconnects. The local copies stay put because Drive never confirmed them.
+                _repository.MarkUploadNeedsAttention(
+                    backup.Id,
+                    "Google 재연결이 필요합니다 (" + (ex.Error?.Error ?? "invalid_grant") + ").");
+                _onNeedsReconnect();
+                _log.Warn("Google authorisation is no longer valid; uploads paused until reconnected.");
+                break;
+            }
             catch (Exception ex)
             {
                 _log.Error($"Upload of {backup.FileName} failed unexpectedly.", ex);

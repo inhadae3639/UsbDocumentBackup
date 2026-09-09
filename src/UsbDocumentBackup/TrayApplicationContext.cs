@@ -52,10 +52,48 @@ public sealed class TrayApplicationContext : ApplicationContext
         _host.Coordinator.StatusChanged += OnStatusChanged;
 
         UpdatePauseLabel();
+        UpdateTrayText();
         _host.Coordinator.Start();
     }
 
-    private void OnStatusChanged() => _uiContext.Post(_ => _statusForm?.Reload(), null);
+    private void OnStatusChanged() => _uiContext.Post(
+        _ =>
+        {
+            _statusForm?.Reload();
+            UpdateTrayText();
+        },
+        null);
+
+    /// <summary>
+    /// Keeps the state on the tray tooltip, because there are no popups to carry it.
+    ///
+    /// This matters most for "reconnect required": an OAuth project in testing expires its refresh
+    /// token every seven days, so uploads stop until someone reconnects. Nothing is lost -- the
+    /// local copies are held precisely because Drive has not confirmed them -- but the user has to
+    /// be able to notice without opening a window.
+    /// </summary>
+    private void UpdateTrayText()
+    {
+        string text;
+        try
+        {
+            var status = _host.Coordinator.GetStatus();
+            var needsReconnect = _host.Google.State == GoogleDrive.ConnectionState.ReconnectRequired;
+
+            text = needsReconnect
+                ? $"USB 문서 백업 — Google 재연결 필요 (업로드 대기 {status.UploadsWaiting + status.UploadsNeedAttention}건)"
+                : status.Paused
+                    ? "USB 문서 백업 — 일시정지"
+                    : $"USB 문서 백업 — 보관 {status.RetainedComplete}건, 업로드 대기 {status.UploadsWaiting}건";
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            text = "USB 문서 백업";
+        }
+
+        // NotifyIcon.Text throws above 63 characters.
+        _icon.Text = text.Length <= 63 ? text : text[..63];
+    }
 
     private void ShowStatus()
     {

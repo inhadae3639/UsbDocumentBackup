@@ -54,7 +54,19 @@ public sealed class FakeDriveClient : IDriveClient
 
     public bool AuthorizationRevoked { get; set; }
 
-    public Task<string> GetAccountKeyAsync(CancellationToken cancellationToken) => Task.FromResult(AccountKey);
+    /// <summary>The refresh token itself is gone, as after the seven-day testing-mode expiry.</summary>
+    public bool RefreshTokenExpired { get; set; }
+
+    public Task<string> GetAccountKeyAsync(CancellationToken cancellationToken)
+    {
+        if (RefreshTokenExpired)
+        {
+            throw new Google.Apis.Auth.OAuth2.Responses.TokenResponseException(
+                new Google.Apis.Auth.OAuth2.Responses.TokenErrorResponse { Error = "invalid_grant" });
+        }
+
+        return Task.FromResult(AccountKey);
+    }
 
     public Task<string> EnsureFolderAsync(string name, string? parentId, CancellationToken cancellationToken)
     {

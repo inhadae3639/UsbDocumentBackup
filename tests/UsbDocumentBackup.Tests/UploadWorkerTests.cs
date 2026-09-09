@@ -278,6 +278,85 @@ public sealed class UploadWorkerTests
         Assert.Contains("Google", result.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task An_expired_refresh_token_asks_for_a_reconnect_instead_of_retrying()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WritePptx("학회 발표 자료.pptx", "발표 내용");
+        workspace.WriteLockFileFor("학회 발표 자료.pptx");
+        var device = workspace.RegisterDevice();
+
+        await workspace.CreateBackupService()
+            .BackupVolumeAsync(device, workspace.VolumeRoot, ScanReason.NewConnection, CancellationToken.None);
+        var backup = Assert.Single(workspace.Repository.Search(null));
+
+        var drive = new FakeDriveClient { RefreshTokenExpired = true };
+        var reconnectRequested = false;
+        var worker = new UploadWorker(
+            workspace.Paths,
+            workspace.Repository,
+            new AppSettings(),
+            new SettingsStore(Path.Combine(workspace.Root, "settings.json")),
+            () => drive,
+            workspace.Log,
+            () => reconnectRequested = true);
+
+        Assert.Equal(0, await worker.RunAsync(CancellationToken.None));
+
+        // An OAuth project in testing expires its refresh token weekly. Backing off would spin
+        // forever, so it has to become an explicit "reconnect required".
+        var upload = workspace.Repository.GetUpload(backup.Id)!;
+        Assert.Equal(UploadState.NeedsAttention, upload.State);
+        Assert.Null(upload.NextAttemptUtc);
+        Assert.True(reconnectRequested);
+
+        // And the one copy of the presentation is still on disk.
+        Assert.True(File.Exists(workspace.ArchivePathOf(backup)));
+
+        // Reconnecting puts it back in the queue and it uploads.
+        drive.RefreshTokenExpired = false;
+        workspace.Repository.RequeueAllNeedingAttention(DateTimeOffset.UtcNow);
+        Assert.Equal(1, await worker.RunAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_reconnect_expiry_does_not_let_the_sweep_delete_the_local_copy()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WritePptx("학회 발표 자료.pptx", "발표 내용");
+        workspace.WriteLockFileFor("학회 발표 자료.pptx");
+        var device = workspace.RegisterDevice();
+
+        await workspace.CreateBackupService()
+            .BackupVolumeAsync(device, workspace.VolumeRoot, ScanReason.NewConnection, CancellationToken.None);
+        var backup = Assert.Single(workspace.Repository.Search(null));
+
+        var drive = new FakeDriveClient { RefreshTokenExpired = true };
+        var worker = new UploadWorker(
+            workspace.Paths,
+            workspace.Repository,
+            new AppSettings(),
+            new SettingsStore(Path.Combine(workspace.Root, "settings.json")),
+            () => drive,
+            workspace.Log);
+        await worker.RunAsync(CancellationToken.None);
+
+        // Months pass while nobody reconnects.
+        using (var connection = workspace.Database.Open())
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE backups SET backed_up_utc = $when WHERE id = $id;";
+            command.Parameters.AddWithValue("$when", DateTimeOffset.UtcNow.AddDays(-200).ToString("o"));
+            command.Parameters.AddWithValue("$id", backup.Id);
+            command.ExecuteNonQuery();
+        }
+
+        var sweep = workspace.CreateSweepService(7).Run();
+
+        Assert.Equal(0, sweep.RetainedLocalCopiesReleased);
+        Assert.True(File.Exists(workspace.ArchivePathOf(backup)));
+    }
+
     /// <summary>Clears the backoff so a retry can be exercised without waiting for it.</summary>
     private static void MakeDue(TestWorkspace workspace, string backupId)
     {
