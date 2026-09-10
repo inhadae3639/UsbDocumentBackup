@@ -24,6 +24,7 @@ public sealed class SettingsForm : Form
     private readonly Button _disconnectButton = new() { Text = "연결 해제", AutoSize = true };
     private readonly Label _monitorSinceLabel = new() { AutoSize = false, Width = 330, Height = 20 };
     private readonly Button _historyButton = new() { Text = "이전 발표자료도 백업...", AutoSize = true };
+    private readonly Button _retryUploadsButton = new() { Text = "실패한 업로드 다시 시도", AutoSize = true };
     private readonly Button _diagnoseButton = new() { Text = "진단 정보 저장...", AutoSize = true };
     private readonly Button _saveButton = new() { Text = "저장", AutoSize = true };
     private readonly Button _closeButton = new() { Text = "닫기", AutoSize = true };
@@ -93,6 +94,7 @@ public sealed class SettingsForm : Form
         buttons.Controls.Add(_closeButton);
         buttons.Controls.Add(_saveButton);
         buttons.Controls.Add(_diagnoseButton);
+        buttons.Controls.Add(_retryUploadsButton);
 
         Controls.Add(layout);
         Controls.Add(buttons);
@@ -102,6 +104,7 @@ public sealed class SettingsForm : Form
         _connectButton.Click += async (_, _) => await ConnectAsync().ConfigureAwait(true);
         _disconnectButton.Click += async (_, _) => await DisconnectAsync().ConfigureAwait(true);
         _historyButton.Click += (_, _) => BackUpOlderPresentations();
+        _retryUploadsButton.Click += (_, _) => RetryFailedUploads();
         _diagnoseButton.Click += (_, _) => SaveDiagnostics();
         _saveButton.Click += (_, _) => Save();
         _closeButton.Click += (_, _) => Close();
@@ -272,6 +275,28 @@ public sealed class SettingsForm : Form
         await _host.Google.DisconnectAsync().ConfigureAwait(true);
         _noticeLabel.Text = "연결을 해제했습니다. 보관된 백업과 Drive의 파일은 그대로 남습니다.";
         RefreshGoogle();
+    }
+
+    /// <summary>
+    /// Puts everything marked "needs attention" back in the queue.
+    ///
+    /// Reconnecting already does this, but that is not obvious, and some failures are nothing to do
+    /// with the account -- a bug in this app that has since been fixed, for instance. Retrying
+    /// costs nothing: an upload that already landed is recognised by its reserved Drive id rather
+    /// than uploaded twice.
+    /// </summary>
+    private void RetryFailedUploads()
+    {
+        var stuck = _host.Repository.CountUploads(Storage.UploadState.NeedsAttention);
+        if (stuck == 0)
+        {
+            _noticeLabel.Text = "조치가 필요한 업로드가 없습니다.";
+            return;
+        }
+
+        _host.Repository.RequeueAllNeedingAttention(DateTimeOffset.UtcNow);
+        _host.Coordinator.RequestScan(Backup.ScanReason.ChangeEvent);
+        _noticeLabel.Text = $"{stuck}건을 다시 시도합니다. 이미 올라간 파일은 중복 생성되지 않습니다.";
     }
 
     /// <summary>

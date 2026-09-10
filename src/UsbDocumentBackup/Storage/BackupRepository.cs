@@ -601,7 +601,10 @@ public sealed class BackupRepository
             command.Parameters.AddWithValue(name, value);
         }
 
-        return command.ExecuteScalar()?.ToString();
+        // ExecuteScalar returns DBNull for a SQL NULL, and DBNull.ToString() is "", which would
+        // turn "no folder recorded" into "a folder named empty string".
+        var scalar = command.ExecuteScalar();
+        return scalar is null or DBNull ? null : scalar.ToString();
     }
 
     private static void Execute(SqliteConnection connection, SqliteTransaction? transaction, string sql, params (string Name, object Value)[] parameters)

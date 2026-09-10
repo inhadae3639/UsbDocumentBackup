@@ -57,9 +57,6 @@ public sealed class BackupDatabase
                 drive_folder_id TEXT
             );
 
-            CREATE UNIQUE INDEX IF NOT EXISTS ix_devices_volume
-                ON devices(volume_id) WHERE volume_id IS NOT NULL;
-            CREATE INDEX IF NOT EXISTS ix_devices_fingerprint ON devices(fingerprint);
 
             CREATE TABLE IF NOT EXISTS backups (
                 id                  TEXT PRIMARY KEY,
@@ -75,11 +72,6 @@ public sealed class BackupDatabase
                 tier                TEXT NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS ix_backups_lookup
-                ON backups(device_id, relative_path, backed_up_utc DESC);
-            CREATE INDEX IF NOT EXISTS ix_backups_state ON backups(state);
-            CREATE INDEX IF NOT EXISTS ix_backups_name ON backups(file_name);
-            CREATE INDEX IF NOT EXISTS ix_backups_tier ON backups(tier, backed_up_utc);
 
             CREATE TABLE IF NOT EXISTS uploads (
                 backup_id        TEXT PRIMARY KEY REFERENCES backups(id),
@@ -96,7 +88,6 @@ public sealed class BackupDatabase
                 uploaded_bytes   INTEGER NOT NULL DEFAULT 0
             );
 
-            CREATE INDEX IF NOT EXISTS ix_uploads_state ON uploads(state, next_attempt_utc);
 
             -- An Office owner file only exists while the document is open, so the fact that we
             -- once saw one has to outlive both the document being closed and the app restarting.
@@ -118,5 +109,83 @@ public sealed class BackupDatabase
             );
             """;
         command.ExecuteNonQuery();
+
+        // Columns first, then indexes. An index over a column added in a later version cannot be
+        // created until that column exists, and doing it the other way round aborts the whole
+        // migration on any database made by an earlier build.
+        AddMissingColumns(connection);
+        CreateIndexes(connection);
+    }
+
+    private static void CreateIndexes(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_devices_volume
+                ON devices(volume_id) WHERE volume_id IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS ix_devices_fingerprint ON devices(fingerprint);
+
+            CREATE INDEX IF NOT EXISTS ix_backups_lookup
+                ON backups(device_id, relative_path, backed_up_utc DESC);
+            CREATE INDEX IF NOT EXISTS ix_backups_state ON backups(state);
+            CREATE INDEX IF NOT EXISTS ix_backups_name ON backups(file_name);
+            CREATE INDEX IF NOT EXISTS ix_backups_tier ON backups(tier, backed_up_utc);
+
+            CREATE INDEX IF NOT EXISTS ix_uploads_state ON uploads(state, next_attempt_utc);
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Columns added after a version shipped.
+    ///
+    /// The CREATE statements above are all "IF NOT EXISTS", so on a database that already has the
+    /// table they do nothing at all -- including for columns added later. Without this, upgrading
+    /// an existing installation left the code querying a column that was never created, and every
+    /// upload failed with "no such column". A new column has to be listed here as well as above.
+    ///
+    /// Each entry must be valid in an ALTER TABLE ADD COLUMN, so anything NOT NULL needs a default.
+    /// </summary>
+    private static readonly (string Table, string Column, string Definition)[] AddedColumns =
+    [
+        ("devices", "drive_folder_id", "TEXT"),
+        ("backups", "tier", "TEXT NOT NULL DEFAULT 'Temporary'"),
+        ("uploads", "resume_uri", "TEXT"),
+        ("uploads", "uploaded_bytes", "INTEGER NOT NULL DEFAULT 0"),
+        ("uploads", "account_key", "TEXT"),
+    ];
+
+    private static void AddMissingColumns(SqliteConnection connection)
+    {
+        foreach (var (table, column, definition) in AddedColumns)
+        {
+            if (HasColumn(connection, table, column))
+            {
+                continue;
+            }
+
+            using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    internal static bool HasColumn(SqliteConnection connection, string table, string column)
+    {
+        using var command = connection.CreateCommand();
+        // PRAGMA does not take parameters; the table names here are all compile-time constants.
+        command.CommandText = $"PRAGMA table_info({table});";
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
