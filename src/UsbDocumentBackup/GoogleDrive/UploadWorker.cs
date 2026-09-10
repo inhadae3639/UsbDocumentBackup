@@ -123,7 +123,8 @@ public sealed class UploadWorker
         {
             // The sweep only releases a local copy after Drive confirms it, so this means the file
             // was lost some other way. There is nothing to upload and retrying cannot help.
-            _repository.MarkUploadNeedsAttention(backup.Id, "The local archive copy is missing.");
+            _repository.MarkUploadNeedsAttention(backup.Id, "로컬 보관본이 없어 올릴 파일이 없습니다.");
+            _log.Warn($"Cannot upload {backup.FileName}: the archive copy at {localPath} is gone.");
             return false;
         }
 
@@ -145,7 +146,8 @@ public sealed class UploadWorker
         {
             _repository.MarkUploadNeedsAttention(
                 backup.Id,
-                $"This backup was queued for {previous} but the connected account is {accountKey}.");
+                $"{previous} 계정용으로 대기 중인데 지금 연결된 계정은 {accountKey} 입니다.");
+            _log.Warn($"Not uploading {backup.FileName}: queued for {previous}, connected as {accountKey}.");
             return false;
         }
 
@@ -248,7 +250,8 @@ public sealed class UploadWorker
                     return false;
 
                 case DriveOutcome.NeedsAttention:
-                    _repository.MarkUploadNeedsAttention(backup.Id, result.Message ?? "Drive refused the upload.");
+                    _repository.MarkUploadNeedsAttention(backup.Id, result.Message ?? "Drive가 업로드를 거부했습니다.");
+                    _log.Warn($"Drive refused {backup.FileName}: {result.Message}");
                     if (result.Message?.Contains("reconnect", StringComparison.OrdinalIgnoreCase) == true)
                     {
                         _onNeedsReconnect();
@@ -374,7 +377,7 @@ public sealed class UploadWorker
         {
             _repository.MarkUploadNeedsAttention(
                 backupId,
-                $"Gave up after {attempts} attempts. Last error: {error}");
+                $"{attempts}회 시도 후 중단했습니다. 마지막 오류: {error}");
             return;
         }
 

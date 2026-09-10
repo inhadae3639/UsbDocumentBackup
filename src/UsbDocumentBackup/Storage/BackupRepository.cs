@@ -428,6 +428,34 @@ public sealed class BackupRepository
         "UPDATE uploads SET state = 'Waiting', next_attempt_utc = $now, attempts = 0 WHERE state = 'NeedsAttention';",
         ("$now", Utc(now)));
 
+    /// <summary>
+    /// Uploads in a given state together with the backup they belong to, so a report can name the
+    /// file and the reason rather than making someone match ids by hand.
+    /// </summary>
+    public IReadOnlyList<(BackupRecord Backup, string? Error, int Attempts)> ListUploadsInState(UploadState state, int limit = 50)
+    {
+        using var connection = _database.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT " + PrefixedBackupColumns + ", u.last_error, u.attempts "
+            + "FROM uploads u JOIN backups b ON b.id = u.backup_id "
+            + "WHERE u.state = $state ORDER BY b.backed_up_utc DESC LIMIT $limit;";
+        command.Parameters.AddWithValue("$state", state.ToString());
+        command.Parameters.AddWithValue("$limit", limit);
+
+        using var reader = command.ExecuteReader();
+        var results = new List<(BackupRecord, string?, int)>();
+        while (reader.Read())
+        {
+            results.Add((
+                ReadBackup(reader),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.GetInt32(12)));
+        }
+
+        return results;
+    }
+
     public UploadRecord? GetUpload(string backupId)
     {
         using var connection = _database.Open();

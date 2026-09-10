@@ -83,6 +83,36 @@ public static class DiagnosticReport
                 Line("     원인은 이 PC에서 Google 연결을 하지 않은 것입니다.");
             }
 
+            // The failing uploads are the point of this report, so they come first and in full.
+            // Listing only the most recent backups hid them behind newer temporary-tier files.
+            foreach (var (heading, state) in new[]
+                     {
+                         ("조치가 필요한 업로드", UploadState.NeedsAttention),
+                         ("대기 중인 업로드", UploadState.Waiting),
+                     })
+            {
+                var rows = repository.ListUploadsInState(state);
+                Line();
+                Line($"  {heading} ({rows.Count}건):");
+                if (rows.Count == 0)
+                {
+                    Line("    (없음)");
+                    continue;
+                }
+
+                foreach (var (backup, error, attempts) in rows)
+                {
+                    Line($"    {backup.BackedUpUtc.ToLocalTime():MM-dd HH:mm}  시도 {attempts}회  {backup.FileName}");
+                    Line($"        사유: {Truncate(error ?? "기록 없음", 110)}");
+
+                    var archived = paths.ResolveArchivePath(backup.LocalRelativePath);
+                    if (!File.Exists(archived))
+                    {
+                        Line("        !! 로컬 보관본이 없습니다. 올릴 파일 자체가 사라졌습니다.");
+                    }
+                }
+            }
+
             Line();
             Line("  최근 백업 10건:");
             foreach (var backup in repository.Search(null, 10))
@@ -90,10 +120,6 @@ public static class DiagnosticReport
                 var upload = repository.GetUpload(backup.Id);
                 var uploadState = upload is null ? "큐 없음(임시 등급)" : upload.State.ToString();
                 Line($"    {backup.BackedUpUtc.ToLocalTime():MM-dd HH:mm}  [{backup.Tier}]  {uploadState,-16}  {backup.FileName}");
-                if (upload?.LastError is { Length: > 0 } error)
-                {
-                    Line($"        실패 사유: {Truncate(error, 100)}");
-                }
             }
 
             Line();
