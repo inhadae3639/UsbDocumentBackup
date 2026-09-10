@@ -33,6 +33,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripMenuItem("백업 폴더 열기", null, (_, _) => AutoStart.OpenFolder(_host.Paths.ArchiveRoot)));
         menu.Items.Add(_pauseItem);
         menu.Items.Add(new ToolStripMenuItem("설정", null, (_, _) => ShowSettings()));
+        menu.Items.Add(new ToolStripMenuItem("진단 정보 저장", null, (_, _) => SaveDiagnostics()));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("종료", null, (_, _) => ExitApp()));
 
@@ -123,6 +124,13 @@ public sealed class TrayApplicationContext : ApplicationContext
             _settingsForm.Activate();
         }
     }
+
+    /// <summary>
+    /// Writes the report to the desktop and opens it. The equivalent of running the executable
+    /// with --diagnose, for when the app is already resident.
+    /// </summary>
+    private void SaveDiagnostics() =>
+        DiagnosticReport.WriteAndShow(_host.Paths, _host.Settings, _host.Google);
 
     private void TogglePause()
     {

@@ -1,3 +1,4 @@
+using UsbDocumentBackup.Storage;
 using UsbDocumentBackup.Windows;
 
 namespace UsbDocumentBackup;
@@ -5,8 +6,22 @@ namespace UsbDocumentBackup;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
+        // Diagnostics run without the single-instance lock and without starting the tray, so the
+        // report can be produced on a PC where the app is already resident.
+        if (args.Any(a => a.Equals("--diagnose", StringComparison.OrdinalIgnoreCase)))
+        {
+            ApplicationConfiguration.Initialize();
+            var paths = AppPaths.CreateDefault();
+            paths.EnsureCreated();
+            var store = new SettingsStore(paths.SettingsFile);
+            var loaded = store.Load();
+            var resolved = loaded.HasCustomArchiveRoot ? paths.WithArchiveRoot(loaded.ArchiveRoot!) : paths;
+            DiagnosticReport.WriteAndShow(resolved, loaded, new GoogleDrive.GoogleConnection(resolved, new Log(resolved.LogDirectory)));
+            return 0;
+        }
+
         using var instance = SingleInstance.TryAcquire();
         if (!instance.Acquired)
         {
