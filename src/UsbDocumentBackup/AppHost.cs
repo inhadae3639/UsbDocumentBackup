@@ -66,6 +66,14 @@ public sealed class AppHost : IAsyncDisposable
         var settingsStore = new SettingsStore(basePaths.SettingsFile);
         var settings = settingsStore.Load();
 
+        // First run establishes "from now on". Without this, the first sweep would treat every
+        // entry in PowerPoint's recent list -- potentially months of it -- as something to upload.
+        if (settings.MonitorSinceUtc is null)
+        {
+            settings.MonitorSinceUtc = DateTimeOffset.UtcNow;
+            settingsStore.Save(settings);
+        }
+
         // The archive can be moved to another disk; state, credentials and logs never move.
         var paths = settings.HasCustomArchiveRoot ? basePaths.WithArchiveRoot(settings.ArchiveRoot!) : basePaths;
         paths.EnsureCreated();
@@ -112,6 +120,7 @@ public sealed class AppHost : IAsyncDisposable
             sweepService,
             openedDocuments,
             uploadWorker,
+            settings,
             log);
         if (settings.Paused)
         {

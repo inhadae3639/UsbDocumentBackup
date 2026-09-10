@@ -31,6 +31,13 @@ public sealed class AppSettings
     /// </summary>
     public int TemporaryRetentionDays { get; set; } = 7;
 
+    /// <summary>
+    /// Only presentations opened at or after this moment are picked up automatically. Set once, on
+    /// first run, so installing the app does not sweep up months of history from PowerPoint's
+    /// recent-file list. Earlier material is backed up only when the user asks for it explicitly.
+    /// </summary>
+    public DateTimeOffset? MonitorSinceUtc { get; set; }
+
     public bool RunAtLogin { get; set; }
 
     public bool Paused { get; set; }

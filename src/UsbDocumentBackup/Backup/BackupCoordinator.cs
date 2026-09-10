@@ -33,6 +33,7 @@ public sealed class BackupCoordinator : IAsyncDisposable
     private readonly ArchiveSweepService _sweepService;
     private readonly IOpenedDocumentSource _openedDocuments;
     private readonly UploadWorker _uploadWorker;
+    private readonly AppSettings _settings;
     private readonly Log _log;
     private readonly TimeProvider _time;
     private readonly bool _watchVolumes;
@@ -51,6 +52,9 @@ public sealed class BackupCoordinator : IAsyncDisposable
     private string _activity = "Idle";
     private DateTimeOffset? _lastScanUtc;
 
+    /// <summary>Set by the user asking for older material; cleared after one sweep.</summary>
+    private bool _includeHistoryOnce;
+
     public BackupCoordinator(
         IVolumeProvider volumeProvider,
         BackupRepository repository,
@@ -58,6 +62,7 @@ public sealed class BackupCoordinator : IAsyncDisposable
         ArchiveSweepService sweepService,
         IOpenedDocumentSource openedDocuments,
         UploadWorker uploadWorker,
+        AppSettings settings,
         Log log,
         TimeProvider? time = null,
         bool watchVolumes = true)
@@ -68,6 +73,7 @@ public sealed class BackupCoordinator : IAsyncDisposable
         _sweepService = sweepService;
         _openedDocuments = openedDocuments;
         _uploadWorker = uploadWorker;
+        _settings = settings;
         _log = log;
         _time = time ?? TimeProvider.System;
         _watchVolumes = watchVolumes;
@@ -96,6 +102,40 @@ public sealed class BackupCoordinator : IAsyncDisposable
         lock (_gate)
         {
             _currentDeviceScan?.Cancel();
+        }
+    }
+
+    /// <summary>
+    /// Runs one sweep that ignores the "monitor since" cutoff, so presentations opened before the
+    /// app was installed are backed up too. One-shot: the next sweep is back to normal.
+    /// </summary>
+    public void RequestHistoricalScan()
+    {
+        _includeHistoryOnce = true;
+        RequestScan(ScanReason.ChangeEvent);
+    }
+
+    /// <summary>
+    /// How many presentations from before the cutoff are still on disk, so the user can be told
+    /// what they are agreeing to before it starts copying.
+    /// </summary>
+    public int CountHistoricalCandidates()
+    {
+        var cutoff = _settings.MonitorSinceUtc;
+        if (cutoff is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return _openedDocuments.GetRecentlyOpened()
+                .Count(d => d.OpenedUtc < cutoff.Value && File.Exists(d.FullPath));
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"Could not count older presentations: {ex.Message}");
+            return 0;
         }
     }
 
@@ -321,14 +361,27 @@ public sealed class BackupCoordinator : IAsyncDisposable
             return;
         }
 
+        // Everything already recorded as opened keeps being backed up regardless of age; the
+        // cutoff only decides what gets picked up in the first place.
+        var includeHistory = _includeHistoryOnce;
+        _includeHistoryOnce = false;
+        var cutoff = includeHistory ? null : _settings.MonitorSinceUtc;
+
         var newVersions = 0;
         var promoted = 0;
+        var skippedAsHistory = 0;
 
         foreach (var document in opened)
         {
             if (shutdown.IsCancellationRequested || Paused)
             {
                 break;
+            }
+
+            if (cutoff is not null && document.OpenedUtc < cutoff.Value)
+            {
+                skippedAsHistory++;
+                continue;
             }
 
             var volume = ResolveVolume(volumes, document.FullPath);
@@ -380,6 +433,13 @@ public sealed class BackupCoordinator : IAsyncDisposable
         if (newVersions > 0 || promoted > 0)
         {
             _log.Info($"Opened presentations: {newVersions} new, {promoted} promoted.");
+        }
+
+        if (skippedAsHistory > 0)
+        {
+            _log.Info(
+                $"Skipped {skippedAsHistory} presentation(s) opened before monitoring began "
+                + $"({_settings.MonitorSinceUtc:yyyy-MM-dd HH:mm}). Use the settings window to include them.");
         }
     }
 

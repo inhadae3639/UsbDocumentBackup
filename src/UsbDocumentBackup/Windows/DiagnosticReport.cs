@@ -129,6 +129,8 @@ public static class DiagnosticReport
         Line("[실행]");
         Line($"  자동 실행 등록: {(AutoStart.IsEnabled() ? "있음" : "없음")}");
         Line($"  일시정지: {settings.Paused}");
+        Line($"  감시 시작: {(settings.MonitorSinceUtc is { } since ? since.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "전체")}");
+        Line("    (이 시각 이전에 연 발표자료는 자동 대상이 아닙니다. 설정 창에서 따로 요청할 수 있습니다.)");
         Line($"  보관 기간: {settings.TemporaryRetentionDays}일");
 
         // ---- log ----

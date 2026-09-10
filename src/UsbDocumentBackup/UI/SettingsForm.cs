@@ -22,6 +22,9 @@ public sealed class SettingsForm : Form
     private readonly Button _importSecretsButton = new() { Text = "클라이언트 설정 파일 선택...", AutoSize = true };
     private readonly Button _connectButton = new() { Text = "연결", AutoSize = true };
     private readonly Button _disconnectButton = new() { Text = "연결 해제", AutoSize = true };
+    private readonly Label _monitorSinceLabel = new() { AutoSize = false, Width = 330, Height = 20 };
+    private readonly Button _historyButton = new() { Text = "이전 발표자료도 백업...", AutoSize = true };
+    private readonly Button _diagnoseButton = new() { Text = "진단 정보 저장...", AutoSize = true };
     private readonly Button _saveButton = new() { Text = "저장", AutoSize = true };
     private readonly Button _closeButton = new() { Text = "닫기", AutoSize = true };
     private readonly Label _noticeLabel = new() { AutoSize = false, Width = 520, Height = 40 };
@@ -33,8 +36,8 @@ public sealed class SettingsForm : Form
         _host = host;
 
         Text = "USB 문서 백업 설정";
-        Width = 620;
-        Height = 460;
+        Width = 660;
+        Height = 520;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -65,23 +68,31 @@ public sealed class SettingsForm : Form
         layout.Controls.Add(new Label { Text = "자동 실행:", AutoSize = true }, 0, 4);
         layout.Controls.Add(_runAtLogin, 1, 4);
 
+        var monitorRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
+        monitorRow.Controls.Add(_monitorSinceLabel);
+        monitorRow.Controls.Add(_historyButton);
+
+        layout.Controls.Add(new Label { Text = "감시 시작:", AutoSize = true }, 0, 5);
+        layout.Controls.Add(monitorRow, 1, 5);
+
         var googleRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
         googleRow.Controls.Add(_importSecretsButton);
         googleRow.Controls.Add(_connectButton);
         googleRow.Controls.Add(_disconnectButton);
 
-        layout.Controls.Add(new Label { Text = "Google 연결:", AutoSize = true }, 0, 5);
-        layout.Controls.Add(_googleLabel, 1, 5);
-
-        layout.Controls.Add(new Label { Text = string.Empty, AutoSize = true }, 0, 6);
-        layout.Controls.Add(googleRow, 1, 6);
+        layout.Controls.Add(new Label { Text = "Google 연결:", AutoSize = true }, 0, 6);
+        layout.Controls.Add(_googleLabel, 1, 6);
 
         layout.Controls.Add(new Label { Text = string.Empty, AutoSize = true }, 0, 7);
-        layout.Controls.Add(_noticeLabel, 1, 7);
+        layout.Controls.Add(googleRow, 1, 7);
+
+        layout.Controls.Add(new Label { Text = string.Empty, AutoSize = true }, 0, 8);
+        layout.Controls.Add(_noticeLabel, 1, 8);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
         buttons.Controls.Add(_closeButton);
         buttons.Controls.Add(_saveButton);
+        buttons.Controls.Add(_diagnoseButton);
 
         Controls.Add(layout);
         Controls.Add(buttons);
@@ -90,6 +101,8 @@ public sealed class SettingsForm : Form
         _importSecretsButton.Click += (_, _) => ImportClientSecrets();
         _connectButton.Click += async (_, _) => await ConnectAsync().ConfigureAwait(true);
         _disconnectButton.Click += async (_, _) => await DisconnectAsync().ConfigureAwait(true);
+        _historyButton.Click += (_, _) => BackUpOlderPresentations();
+        _diagnoseButton.Click += (_, _) => SaveDiagnostics();
         _saveButton.Click += (_, _) => Save();
         _closeButton.Click += (_, _) => Close();
 
@@ -104,6 +117,10 @@ public sealed class SettingsForm : Form
         _runAtLogin.Checked = AutoStart.IsEnabled();
 
         RefreshGoogle();
+
+        _monitorSinceLabel.Text = _host.Settings.MonitorSinceUtc is { } since
+            ? $"{since.ToLocalTime():yyyy-MM-dd HH:mm} 이후 연 자료"
+            : "전체";
 
         // Backup rows store a path relative to the archive root, so moving the root would leave
         // every existing record pointing at a file that is not there: the list would still show
@@ -255,6 +272,63 @@ public sealed class SettingsForm : Form
         await _host.Google.DisconnectAsync().ConfigureAwait(true);
         _noticeLabel.Text = "연결을 해제했습니다. 보관된 백업과 Drive의 파일은 그대로 남습니다.";
         RefreshGoogle();
+    }
+
+    /// <summary>
+    /// Backs up presentations opened before this app was installed. Off by default because
+    /// PowerPoint's recent list can hold months of material, and uploading all of it the moment
+    /// the app is installed is rarely what someone wants.
+    /// </summary>
+    private void BackUpOlderPresentations()
+    {
+        var count = _host.Coordinator.CountHistoricalCandidates();
+        if (count == 0)
+        {
+            MessageBox.Show(
+                "감시 시작 이전에 열었던 발표자료 중 지금도 남아 있는 파일이 없습니다.",
+                "이전 발표자료",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            this,
+            $"PowerPoint 최근 문서 목록에서 감시 시작 이전에 열었던 발표자료 {count}건을 찾았습니다."
+                + Environment.NewLine + Environment.NewLine
+                + "지금 백업하고 Drive에 올릴까요? 파일이 크면 시간이 걸릴 수 있습니다."
+                + Environment.NewLine
+                + "이번 한 번만 적용되며, 이후에는 다시 감시 시작 이후 자료만 처리합니다.",
+            "이전 발표자료도 백업",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _host.Coordinator.RequestHistoricalScan();
+        _noticeLabel.Text = $"이전 발표자료 {count}건을 처리합니다. 상태 창에서 진행 상황을 볼 수 있습니다.";
+    }
+
+    /// <summary>
+    /// Writes the report to the desktop and opens it. Sits here because this is the window someone
+    /// is already looking at when uploads are not happening, and it saves them a command line.
+    /// </summary>
+    private void SaveDiagnostics()
+    {
+        _diagnoseButton.Enabled = false;
+        _noticeLabel.Text = "진단 정보를 만드는 중...";
+        try
+        {
+            DiagnosticReport.WriteAndShow(_host.Paths, _host.Settings, _host.Google);
+            _noticeLabel.Text = "바탕화면에 진단 파일을 저장했습니다. 비밀번호나 토큰은 들어 있지 않습니다.";
+        }
+        finally
+        {
+            _diagnoseButton.Enabled = true;
+        }
     }
 
     private void ChooseArchiveRoot()
