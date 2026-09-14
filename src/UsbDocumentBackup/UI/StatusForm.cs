@@ -23,6 +23,7 @@ public sealed class StatusForm : Form
         HideSelection = false,
     };
 
+    private readonly Button _uploadButton = new() { Text = "선택 파일 Drive 업로드", AutoSize = true };
     private readonly Button _restoreButton = new() { Text = "선택 버전 복원...", AutoSize = true };
     private readonly Button _refreshButton = new() { Text = "새로 고침", AutoSize = true };
     private readonly Button _issuesButton = new() { Text = "문제 기록...", AutoSize = true };
@@ -52,6 +53,7 @@ public sealed class StatusForm : Form
         searchRow.Controls.Add(_refreshButton, 1, 0);
 
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 40, FlowDirection = FlowDirection.LeftToRight };
+        buttonRow.Controls.Add(_uploadButton);
         buttonRow.Controls.Add(_restoreButton);
         buttonRow.Controls.Add(_issuesButton);
 
@@ -63,6 +65,7 @@ public sealed class StatusForm : Form
 
         _refreshButton.Click += (_, _) => Reload();
         _searchBox.TextChanged += (_, _) => Reload();
+        _uploadButton.Click += (_, _) => UploadSelected();
         _restoreButton.Click += async (_, _) => await RestoreSelectedAsync().ConfigureAwait(true);
         _issuesButton.Click += (_, _) => ShowIssues();
 
@@ -92,6 +95,49 @@ public sealed class StatusForm : Form
         }
 
         _list.EndUpdate();
+    }
+
+    /// <summary>
+    /// Sends the selected backup to Drive now.
+    ///
+    /// Automatic uploading only covers presentations PowerPoint recorded as opened since monitoring
+    /// began. Anything else -- a deck found on a stick but never opened here, or one opened before
+    /// the app was installed -- sits in the temporary tier, and this is how it gets picked.
+    /// </summary>
+    private void UploadSelected()
+    {
+        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not BackupRecord record)
+        {
+            _resultLabel.Text = "업로드할 파일을 먼저 선택하세요.";
+            return;
+        }
+
+        if (_host.Google.State != GoogleDrive.ConnectionState.Connected)
+        {
+            _resultLabel.Text = "Google에 연결되어 있지 않습니다. 설정에서 연결한 뒤 다시 시도하세요. (요청은 대기열에 남습니다)";
+        }
+
+        var result = _host.BackupService.RequestUpload(record.Id);
+        _resultLabel.Text = result switch
+        {
+            UploadRequestResult.Queued =>
+                $"'{record.FileName}' 을(를) 업로드 대기열에 넣었습니다. 잠시 후 상태가 바뀝니다.",
+            UploadRequestResult.AlreadyUploaded =>
+                $"'{record.FileName}' 은(는) 이미 Drive에 올라가 있습니다.",
+            UploadRequestResult.NotReady =>
+                "아직 백업이 끝나지 않은 파일입니다.",
+            UploadRequestResult.NotFound =>
+                "선택한 백업 기록을 찾을 수 없습니다. 목록을 새로 고쳐 주세요.",
+            _ =>
+                "업로드 대기열에 넣지 못했습니다. 문제 기록을 확인하세요.",
+        };
+
+        if (result == UploadRequestResult.Queued)
+        {
+            _host.Coordinator.RequestScan(ScanReason.ChangeEvent);
+        }
+
+        Reload();
     }
 
     private async Task RestoreSelectedAsync()

@@ -19,6 +19,7 @@ public sealed class AppHost : IAsyncDisposable
         Log log,
         BackupRepository repository,
         BackupCoordinator coordinator,
+        BackupService backupService,
         RestoreService restoreService,
         RecoveryService recoveryService,
         ArchiveSweepService sweepService,
@@ -31,6 +32,7 @@ public sealed class AppHost : IAsyncDisposable
         Log = log;
         Repository = repository;
         Coordinator = coordinator;
+        BackupService = backupService;
         RestoreService = restoreService;
         RecoveryService = recoveryService;
         SweepService = sweepService;
@@ -49,6 +51,8 @@ public sealed class AppHost : IAsyncDisposable
     public BackupRepository Repository { get; }
 
     public BackupCoordinator Coordinator { get; }
+
+    public BackupService BackupService { get; }
 
     public RestoreService RestoreService { get; }
 
@@ -134,6 +138,7 @@ public sealed class AppHost : IAsyncDisposable
             log,
             repository,
             coordinator,
+            backupService,
             new RestoreService(paths, repository, DriveClient),
             new RecoveryService(paths, repository, log),
             sweepService,

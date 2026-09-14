@@ -147,13 +147,18 @@ public sealed class FakeDriveClient : IDriveClient
         return Task.FromResult<long?>(session.Received.Count);
     }
 
+    /// <summary>Content-Range values Drive was asked to accept, for assertions.</summary>
+    public List<(long Offset, long Length, long Total)> ChunkRanges { get; } = [];
+
     public async Task<DriveResult> UploadChunkAsync(
         string sessionUri,
         Stream content,
         long offset,
+        long chunkLength,
         long totalBytes,
         CancellationToken cancellationToken)
     {
+        ChunkRanges.Add((offset, chunkLength, totalBytes));
         if (AuthorizationRevoked)
         {
             return new DriveResult(DriveOutcome.NeedsAttention, "Google rejected the credentials; reconnect the account.");
@@ -177,7 +182,35 @@ public sealed class FakeDriveClient : IDriveClient
 
         using var buffer = new MemoryStream();
         await content.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-        session.Received.AddRange(buffer.ToArray());
+        var body = buffer.ToArray();
+
+        // Drive validates the declared range against the body and the bytes it already holds. The
+        // earlier fake accepted anything, which let a wrong Content-Range ship: real uploads of
+        // files bigger than one chunk came back as
+        // "There were N byte(s) in the request body. There should be ...".
+        if (body.Length != chunkLength)
+        {
+            return new DriveResult(
+                DriveOutcome.NeedsAttention,
+                $"Drive returned 400: There were {body.Length} byte(s) in the request body. "
+                + $"There should be {chunkLength}.");
+        }
+
+        if (offset != session.Received.Count)
+        {
+            return new DriveResult(
+                DriveOutcome.NeedsAttention,
+                $"Drive returned 400: expected the chunk to start at {session.Received.Count} but it started at {offset}.");
+        }
+
+        if (offset + chunkLength > totalBytes)
+        {
+            return new DriveResult(
+                DriveOutcome.NeedsAttention,
+                "Drive returned 400: the range runs past the declared total size.");
+        }
+
+        session.Received.AddRange(body);
 
         if (session.Received.Count < session.TotalBytes)
         {

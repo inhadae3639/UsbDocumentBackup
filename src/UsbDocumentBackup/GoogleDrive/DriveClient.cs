@@ -238,6 +238,7 @@ public sealed class DriveClient : IDriveClient
         string sessionUri,
         Stream content,
         long offset,
+        long chunkLength,
         long totalBytes,
         CancellationToken cancellationToken)
     {
@@ -246,11 +247,14 @@ public sealed class DriveClient : IDriveClient
             using var request = await RequestAsync(HttpMethod.Put, sessionUri, cancellationToken).ConfigureAwait(false);
             request.Content = new StreamContent(content);
 
-            var length = totalBytes - offset;
-            if (length > 0)
+            if (chunkLength > 0)
             {
+                // The range must describe exactly the bytes in this request, not everything that
+                // is left. Declaring the whole remainder while sending one chunk makes Drive reply
+                // "There were N byte(s) in the request body. There should be ...", which is what
+                // happened to every file larger than a single chunk.
                 request.Content.Headers.ContentRange =
-                    new ContentRangeHeaderValue(offset, totalBytes - 1, totalBytes) { Unit = "bytes" };
+                    new ContentRangeHeaderValue(offset, offset + chunkLength - 1, totalBytes) { Unit = "bytes" };
             }
             else
             {

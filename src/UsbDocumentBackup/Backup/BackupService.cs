@@ -20,6 +20,16 @@ public sealed record BackupSummary(int NewVersions, int Unchanged, int Promoted,
     public static readonly BackupSummary Empty = new(0, 0, 0, 0, 0);
 }
 
+/// <summary>Outcome of asking for one backup to be uploaded.</summary>
+public enum UploadRequestResult
+{
+    Queued,
+    AlreadyUploaded,
+    NotFound,
+    NotReady,
+    Failed,
+}
+
 /// <summary>What happened to one document we were asked to back up by name.</summary>
 public enum DocumentBackupResult
 {
@@ -116,7 +126,7 @@ public sealed class BackupService
                 // needs no read at all: the verified bytes are already in the archive.
                 if (tier == BackupTier.Retained && previous.Tier == BackupTier.Temporary)
                 {
-                    promoted += Promote(device, previous) ? 1 : 0;
+                    promoted += Promote(previous) ? 1 : 0;
                 }
                 else
                 {
@@ -199,7 +209,7 @@ public sealed class BackupService
                 return DocumentBackupResult.Unchanged;
             }
 
-            return Promote(device, previous) ? DocumentBackupResult.Promoted : DocumentBackupResult.Failed;
+            return Promote(previous) ? DocumentBackupResult.Promoted : DocumentBackupResult.Failed;
         }
 
         var outcome = await BackupDocumentAsync(device, document, previous, BackupTier.Retained, cancellationToken)
@@ -329,7 +339,7 @@ public sealed class BackupService
 
             if (tier == BackupTier.Retained && previous.Tier == BackupTier.Temporary)
             {
-                return Promote(device, previous) ? DocumentOutcome.Promoted : DocumentOutcome.Failed;
+                return Promote(previous) ? DocumentOutcome.Promoted : DocumentOutcome.Failed;
             }
 
             return DocumentOutcome.Unchanged;
@@ -372,6 +382,42 @@ public sealed class BackupService
     }
 
     /// <summary>
+    /// Sends one already-backed-up file to Drive on request, whatever tier it is in.
+    ///
+    /// The automatic rules are deliberately narrow -- only presentations PowerPoint recorded as
+    /// opened since monitoring began -- so there has to be a way to say "this one as well" without
+    /// widening them for everything.
+    /// </summary>
+    public UploadRequestResult RequestUpload(string backupId)
+    {
+        var backup = _repository.GetBackup(backupId);
+        if (backup is null)
+        {
+            return UploadRequestResult.NotFound;
+        }
+
+        if (backup.State != BackupState.Complete)
+        {
+            return UploadRequestResult.NotReady;
+        }
+
+        if (backup.Tier == BackupTier.Temporary)
+        {
+            return Promote(backup) ? UploadRequestResult.Queued : UploadRequestResult.Failed;
+        }
+
+        var upload = _repository.GetUpload(backupId);
+        if (upload?.State == UploadState.Done)
+        {
+            return UploadRequestResult.AlreadyUploaded;
+        }
+
+        // Retained but stalled, or queued and simply not reached yet. Either way, make it due now.
+        _repository.RequeueUpload(backupId, _time.GetUtcNow());
+        return UploadRequestResult.Queued;
+    }
+
+    /// <summary>
     /// Moves an already-verified temporary copy into the retained tree and queues its upload.
     /// The user's document is not touched: these bytes were checked when they were first copied.
     ///
@@ -380,12 +426,12 @@ public sealed class BackupService
     /// the temporary path this same backup id maps to and completes the move. Doing it the other
     /// way round would leave the row pointing at a path whose file had already been moved away.
     /// </summary>
-    private bool Promote(DeviceRecord device, BackupRecord record)
+    private bool Promote(BackupRecord record)
     {
         var from = _paths.ResolveArchivePath(record.LocalRelativePath);
         if (!File.Exists(from))
         {
-            _repository.LogIssue("PromoteFailed", device.Id, record.RelativePath, "Archive copy is missing.", _time.GetUtcNow());
+            _repository.LogIssue("PromoteFailed", record.DeviceId, record.RelativePath, "Archive copy is missing.", _time.GetUtcNow());
             return false;
         }
 
@@ -398,7 +444,7 @@ public sealed class BackupService
             // will move the bytes. Nothing is lost by returning here.
             _repository.LogIssue(
                 "PromoteMovePending",
-                device.Id,
+                record.DeviceId,
                 record.RelativePath,
                 "Tier updated but the archive file has not moved yet; recovery will finish it.",
                 _time.GetUtcNow());

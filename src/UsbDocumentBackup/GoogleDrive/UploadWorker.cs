@@ -21,7 +21,7 @@ namespace UsbDocumentBackup.GoogleDrive;
 public sealed class UploadWorker
 {
     /// <summary>Drive requires resumable chunks to be a multiple of 256 KiB.</summary>
-    private const int ChunkSize = 8 * 1024 * 1024;
+    public const int DefaultChunkSize = 8 * 1024 * 1024;
 
     private const int MaxTransientAttempts = 12;
 
@@ -33,6 +33,7 @@ public sealed class UploadWorker
     private readonly AppSettings _settings;
     private readonly SettingsStore _settingsStore;
     private readonly Action _onNeedsReconnect;
+    private readonly int _chunkSize;
 
     public UploadWorker(
         AppPaths paths,
@@ -42,7 +43,8 @@ public sealed class UploadWorker
         Func<IDriveClient?> clientFactory,
         Log log,
         Action? onNeedsReconnect = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        int chunkSize = DefaultChunkSize)
     {
         _paths = paths;
         _repository = repository;
@@ -52,6 +54,7 @@ public sealed class UploadWorker
         _log = log;
         _onNeedsReconnect = onNeedsReconnect ?? (() => { });
         _time = time ?? TimeProvider.System;
+        _chunkSize = chunkSize;
     }
 
     /// <summary>
@@ -225,11 +228,11 @@ public sealed class UploadWorker
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var length = (int)Math.Min(ChunkSize, totalBytes - offset);
+            var length = (int)Math.Min(_chunkSize, totalBytes - offset);
             await using var chunk = new ChunkStream(localPath, offset, length, limiter, cancellationToken);
 
             var result = await client
-                .UploadChunkAsync(sessionUri, chunk, offset, totalBytes, cancellationToken)
+                .UploadChunkAsync(sessionUri, chunk, offset, length, totalBytes, cancellationToken)
                 .ConfigureAwait(false);
 
             switch (result.Outcome)

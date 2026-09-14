@@ -423,6 +423,12 @@ public sealed class BackupRepository
         ("$error", error),
         ("$id", backupId));
 
+    /// <summary>Makes one upload due immediately, whatever state it was in.</summary>
+    public void RequeueUpload(string backupId, DateTimeOffset now) => Execute(
+        "UPDATE uploads SET state = 'Waiting', next_attempt_utc = $now, attempts = 0 WHERE backup_id = $id;",
+        ("$now", Utc(now)),
+        ("$id", backupId));
+
     /// <summary>Puts everything that needs attention back in the queue, after a reconnect.</summary>
     public int RequeueAllNeedingAttention(DateTimeOffset now) => Execute(
         "UPDATE uploads SET state = 'Waiting', next_attempt_utc = $now, attempts = 0 WHERE state = 'NeedsAttention';",

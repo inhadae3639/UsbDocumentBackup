@@ -74,11 +74,19 @@ public interface IDriveClient
     /// </summary>
     Task<long?> GetResumeOffsetAsync(string sessionUri, long totalBytes, CancellationToken cancellationToken);
 
-    /// <summary>Sends one chunk. Reports completion when Drive accepts the final byte.</summary>
+    /// <summary>
+    /// Sends one chunk. Reports completion when Drive accepts the final byte.
+    /// </summary>
+    /// <param name="chunkLength">
+    /// How many bytes <paramref name="content"/> actually yields. Drive rejects the request when
+    /// the declared Content-Range does not match the body it received, so this cannot be inferred
+    /// from the total size.
+    /// </param>
     Task<DriveResult> UploadChunkAsync(
         string sessionUri,
         Stream content,
         long offset,
+        long chunkLength,
         long totalBytes,
         CancellationToken cancellationToken);
 
