@@ -1,4 +1,4 @@
-# USB 문서 자동 백업
+# 문서 자동 백업
 
 Windows 로그인 후 트레이에 상주하면서, USB에 연결된 발표 자료를 PC에 먼저 백업하는 프로그램.
 설계 문서: `USB-Drive-Backup-Implementation-Plan.md` (2026-09-09), 이후 사용자 요구로 **보관 등급**이 추가됨.
@@ -56,10 +56,24 @@ Windows 로그인 후 트레이에 상주하면서, USB에 연결된 발표 자�
 상태면 몇 달이 지나도 지우지 않는다. 정리된 뒤에도 DB 행은 남으므로 SHA-256과 Drive 파일 ID로
 Drive에서 내려받아 복원할 수 있다 — 단, 그 시점부터 **복원이 Drive 단독 의존**이 된다.
 
+## 이전 버전에서 올라올 때
+
+프로그램 이름이 `UsbDocumentBackup` 에서 `DocumentBackup` 으로 바뀌었다.
+새 실행 파일을 처음 켜면 자동으로 정리한다.
+
+- 데이터 폴더를 `%LOCALAPPDATA%` 아래 `UsbDocumentBackup` 에서 `DocumentBackup` 으로 **옮긴다.**
+  보관본·상태 DB·Google 토큰이 전부 그대로 따라오므로 다시 연결할 필요가 없다.
+- 예전 이름으로 남아 있던 자동 실행 등록을 지운다.
+- Drive 폴더는 **ID로 기억**하므로 기존 `USB Document Backups` 폴더에 계속 올라간다.
+  이름이 거슬리면 Drive 웹에서 직접 바꿔도 된다 — 앱은 ID를 쓰므로 영향이 없다.
+  새로 설치하는 경우에는 `Document Backups` 로 만들어진다.
+
+예전 실행 파일(`UsbDocumentBackup.exe`)은 자동으로 지우지 않는다. 직접 삭제하면 된다.
+
 ## 보관 위치
 
 ```
-%LOCALAPPDATA%\UsbDocumentBackup\
+%LOCALAPPDATA%\DocumentBackup\
   settings.json          설정 (UTF-8)
   state.db               SQLite 상태 (장치·백업·업로드 큐·열린 문서 기록·문제 기록)
   credentials/           현재 Windows 사용자로 암호화된 인증 정보
@@ -98,11 +112,11 @@ rename까지 끝났고 해시가 맞으면 완료 처리하고, 아니면 행과
 .NET 10 SDK 필요.
 
 ```bash
-dotnet build UsbDocumentBackup.slnx -c Release
+dotnet build DocumentBackup.slnx -c Release
 ```
 
 ```bash
-dotnet test tests/UsbDocumentBackup.Tests/UsbDocumentBackup.Tests.csproj
+dotnet test tests/DocumentBackup.Tests/DocumentBackup.Tests.csproj
 ```
 
 ## 배포
@@ -110,11 +124,11 @@ dotnet test tests/UsbDocumentBackup.Tests/UsbDocumentBackup.Tests.csproj
 런타임을 포함한 단일 실행 파일을 만든다. **대상 PC에는 .NET을 설치하지 않아도 된다.**
 
 ```bash
-dotnet publish src/UsbDocumentBackup/UsbDocumentBackup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/publish
+dotnet publish src/DocumentBackup/DocumentBackup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/publish
 ```
 
-`artifacts/publish/UsbDocumentBackup.exe` (약 105 MB) 하나를 대상 PC의 **고정된 폴더**에 두고 실행한다.
-예: `C:\Program Files\UsbDocumentBackup\` 또는 `%LOCALAPPDATA%\Programs\UsbDocumentBackup\`.
+`artifacts/publish/DocumentBackup.exe` (약 105 MB) 하나를 대상 PC의 **고정된 폴더**에 두고 실행한다.
+예: `C:\Program Files\DocumentBackup\` 또는 `%LOCALAPPDATA%\Programs\DocumentBackup\`.
 
 ### 자동 실행 등록 / 해제
 
@@ -125,7 +139,7 @@ dotnet publish src/UsbDocumentBackup/UsbDocumentBackup.csproj -c Release -r win-
 사라질 경로가 시작 프로그램에 남는 것을 막기 위한 의도된 동작이다.
 
 제거하려면 체크를 해제하거나 위 레지스트리 값을 지운다. **프로그램을 지워도 백업은 지워지지 않는다.**
-보관본을 없애려면 `%LOCALAPPDATA%\UsbDocumentBackup\`을 직접 삭제해야 한다.
+보관본을 없애려면 `%LOCALAPPDATA%\DocumentBackup\`을 직접 삭제해야 한다.
 
 ## 사용
 
@@ -139,7 +153,7 @@ dotnet publish src/UsbDocumentBackup/UsbDocumentBackup.csproj -c Release -r win-
 
 ## 성능
 
-USB 읽기는 기본 5 MiB/s, 업로드는 2 MiB/s로 제한한다(설정에서 변경 가능). 원본을 읽는 **모든** 경로가
+원본 읽기는 기본 5 MiB/s, 업로드는 2 MiB/s로 제한한다(설정에서 변경 가능). 원본을 읽는 **모든** 경로가
 같은 제한을 통과하므로 해시 계산이 제한을 우회하는 구멍이 없다.
 
 제한이 낮을수록 발표 중 간섭은 줄지만 복사 완료까지 걸리는 시간이 길어지고, 그동안 USB가 뽑히면
@@ -150,7 +164,7 @@ USB 읽기는 기본 5 MiB/s, 업로드는 2 MiB/s로 제한한다(설정에서 
 ## 문제가 생겼을 때
 
 **설정 → 진단 정보 저장...** 을 누르면 바탕화면에 진단 파일이 저장되고 열립니다.
-명령줄에서 `UsbDocumentBackup.exe --diagnose` 로도 같은 일을 할 수 있습니다.
+명령줄에서 `DocumentBackup.exe --diagnose` 로도 같은 일을 할 수 있습니다.
 
 연결 상태, 이 PC에 토큰이 있는지, 백업·업로드 건수, 업로드 실패 사유, 최근 경고가 담깁니다.
 **비밀번호·토큰·client secret은 포함되지 않습니다.**

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>DocumentBackup</AssemblyName>
+    <RootNamespace>DocumentBackup</RootNamespace>
+    <ApplicationIcon />
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="System.Management" Version="10.0.0" />
+    <!--
+      Microsoft.Data.Sqlite 10.0.0 still pulls SQLitePCLRaw 2.1.x, whose bundled SQLite build has a
+      known high-severity advisory (GHSA-2m69-gcr7-jv3q). Pinning the 3.x bundle directly overrides
+      the transitive reference with a patched native SQLite.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <!-- OAuth only. Drive calls are made directly over REST so the resumable upload session can be
+         persisted and resumed after a restart, which the client library does not expose. -->
+    <PackageReference Include="Google.Apis.Auth" Version="1.76.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DocumentBackup.Tests" />
+  </ItemGroup>
+
+  <!--
+    The OAuth desktop client is baked into the binary so a single exe works on any PC with nothing
+    beside it. Google treats an installed-app client secret as non-secret, but this repository is
+    public and GitHub secret scanning would get the credential revoked, so the file lives outside
+    version control. The Condition keeps the project building for anyone who clones without it.
+  -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\secrets\client_secret.json')">
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\secrets\client_secret.json"
+                      LogicalName="DocumentBackup.client_secret.json" />
+  </ItemGroup>
+
+</Project>

@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/UsbDocumentBackup/UsbDocumentBackup.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/UsbDocumentBackup.Tests/UsbDocumentBackup.Tests.csproj" />
-  </Folder>
-</Solution>

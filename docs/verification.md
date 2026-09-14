@@ -47,7 +47,7 @@ PPTX(OPC 패키지: `[Content_Types].xml`, 관계, 슬라이드 마스터/레이
 ## 2. 빌드·패키징 검증 완료
 
 - `dotnet build -c Debug` / `-c Release`: 경고 0, 오류 0 (`TreatWarningsAsErrors=true`)
-- 자체 포함 단일 실행 파일 생성 성공: `artifacts/publish/UsbDocumentBackup.exe` (약 106 MB)
+- 자체 포함 단일 실행 파일 생성 성공: `artifacts/publish/DocumentBackup.exe` (약 106 MB)
 - 취약점 스캔: `Microsoft.Data.Sqlite` 10.0.0이 끌어오던 `SQLitePCLRaw.lib.e_sqlite3` 2.1.11의
   high 등급 권고(GHSA-2m69-gcr7-jv3q)를 빌드가 오류로 잡아냄 →
   `SQLitePCLRaw.bundle_e_sqlite3` 3.0.5를 직접 고정해 해소
